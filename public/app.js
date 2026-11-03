@@ -166,7 +166,9 @@ function viewGames(){
         h("div",null,h("strong",{text:String(games.length)}),h("span",{text:games.length === 1 ? "game" : "games"})),
         h("div",null,h("strong",{text:String(studios)}),h("span",{text:studios === 1 ? "studio" : "studios"})),
         h("div",null,h("strong",{text:String(players)}),h("span",{text:players === 1 ? "solo maker" : "solo makers"})))),
-    h("a",{class:"btn onink", href:"#you"}, me() ? "Post a game" : "Create your profile")));
+    h("div",{class:"side"},
+      h("img",{class:"emblem", src:"/brand/samurai-mark-light.png", alt:"SamurAi samurai helmet emblem", width:"150", height:"183"}),
+      h("a",{class:"btn onink", href:"#you"}, me() ? "Post a game" : "Create your profile"))));
 
   const q = S.q.trim().toLowerCase();
   let list = games.filter(({g,c}) =>
