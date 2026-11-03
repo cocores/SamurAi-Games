@@ -7,7 +7,7 @@ const LENGTHS = ["Under 5 min","5–15 min","15–60 min","Hours","Endless"];
 const S = {
   uid:null, email:null, canMod:false, sessionKnown:false,
   ready:false, loadError:null,
-  creators:new Map(), featured:[],
+  creators:new Map(), featured:[], ratings:{}, mine:{},
   q:"", genre:"All", sort:"new", ckind:"all",
   view:"games", handle:null,
   edit:null, profDraft:null, authMode:"signup",
@@ -100,13 +100,14 @@ async function load(){
     const j = await api("/api/creators");
     S.creators = new Map(j.creators.map(c => [c.uid, c]));
     S.featured = j.featured || [];
+    S.ratings = j.ratings || {};
     S.loadError = null;
   } catch(e){ S.loadError = e.message; }
   S.ready = true;
   render();
 }
 async function loadSession(){
-  try { const j = await api("/api/session"); S.uid = j.user ? j.user.uid : null; S.email = j.user ? j.user.email : null; S.canMod = !!j.canMod; }
+  try { const j = await api("/api/session"); S.uid = j.user ? j.user.uid : null; S.email = j.user ? j.user.email : null; S.canMod = !!j.canMod; if (S.uid) await loadMine(); }
   catch { S.uid = null; }
   S.sessionKnown = true;
   renderAcct();
@@ -146,7 +147,7 @@ function renderAcct(){
 }
 async function signOut(){
   try { await api("/api/session","POST",{action:"logout"}); } catch {}
-  S.uid = null; S.email = null; S.canMod = false; S.edit = null; S.profDraft = null; S.dirty = false;
+  S.uid = null; S.email = null; S.canMod = false; S.mine = {}; S.edit = null; S.profDraft = null; S.dirty = false;
   renderAcct(); render(true); toast("Signed out");
 }
 
@@ -176,6 +177,7 @@ function viewGames(){
     (!q || [g.title, g.tagline, g.description, c.name, g.genre].join(" ").toLowerCase().includes(q)));
   if (S.sort === "new") list.sort((a,b) => (b.g.createdAt||0) - (a.g.createdAt||0));
   else if (S.sort === "az") list.sort((a,b) => a.g.title.localeCompare(b.g.title));
+  else if (S.sort === "top") list.sort((a,b) => ratingRank(b.key) - ratingRank(a.key) || (b.g.createdAt||0) - (a.g.createdAt||0));
   else if (S.sort === "creator") list.sort((a,b) => (a.c.name||"").localeCompare(b.c.name||"") || a.g.title.localeCompare(b.g.title));
 
   const feat = S.featured.map(k => games.find(x => x.key === k)).filter(Boolean);
@@ -184,7 +186,7 @@ function viewGames(){
   const searchIn = h("input",{id:"q", type:"search", placeholder:"Search games, makers, genres", value:S.q, "aria-label":"Search games",
     oninput:e => { S.q = e.target.value; const pos = e.target.selectionStart; render(); const n = $("#q"); if (n){ n.focus(); n.setSelectionRange(pos,pos); } }});
   const sortSel = h("select",{id:"sort","aria-label":"Sort games", onchange:e => { S.sort = e.target.value; render(); }},
-    [["new","Newest first"],["az","Title A–Z"],["creator","By maker"]].map(([v,t]) => h("option",{value:v, selected:S.sort===v, text:t})));
+    [["new","Newest first"],["top","Top rated"],["az","Title A–Z"],["creator","By maker"]].map(([v,t]) => h("option",{value:v, selected:S.sort===v, text:t})));
 
   const main = h("main",{class:"wrap"},
     statusNotice(),
@@ -211,6 +213,7 @@ function gameCard({g,c,key}, featured){
     h("div",{class:"body"},
       h("h3",null, h("button",{class:"linkbtn", type:"button", onclick:() => openModal(key), text:g.title})),
       g.tagline ? h("p",{class:"tagline", text:g.tagline}) : null,
+      ratingLine(key),
       h("div",{class:"meta"}, g.genre ? h("span",{class:"tag", text:g.genre}) : null, (g.controls||[]).slice(0,3).map(x => h("span",{class:"tag", text:x}))),
       h("div",{class:"foot"},
         h("a",{class:"by", href:"#by-" + c.handle, title:c.name}, avatar(c), h("span",{text:c.name})),
@@ -272,6 +275,7 @@ function viewAbout(){
     ["Who can post?", "Anyone with an account. Create one from Your profile, choose whether you're a studio or company or a solo maker, and you can start posting."],
     ["Where are the games hosted?", "Makers host their own games, for example as a published Claude artifact or on their own site. SamurAi Games lists them and links out, so you always play the maker's own version."],
     ["What can I post?", "Games you made, or helped make, with Claude. Each listing needs a title and an https play link; a cover image, description, genre and controls help people find it."],
+    ["How do ratings work?", "Signed-in players can give any game 1 to 5 stars, except their own. Each game shows its average and how many people rated it, and you can change or clear your rating any time. Top rated sorting gives a little extra weight to games with more ratings."],
     ["How are games featured?", "The arcade's moderators pick a few games for the Featured row. They can also remove listings or profiles that break the rules or don't work."],
     ["Can I change or remove my games?", "Yes. Open Your profile to edit any listing, swap its cover image or delete it. Changes show up straight away."],
   ];
@@ -291,6 +295,54 @@ function viewAbout(){
     h("section",{class:"panel", style:"margin-top:20px"},
       h("h2",{style:"margin-bottom:14px", text:"Questions"}),
       h("div",{class:"faq"}, faq.map(([q,a]) => h("div",null, h("h3",{text:q}), h("p",{text:a})))))));
+}
+
+/* ---------- ratings ---------- */
+async function loadMine(){ try { S.mine = (await api("/api/ratings")).mine || {}; } catch { S.mine = {}; } }
+// Rank with a light prior (3 stars, weight 2) so one 5-star vote doesn't outrank many 4.8s.
+function ratingRank(key){ const r = S.ratings[key]; return r ? (r.avg * r.count + 3 * 2) / (r.count + 2) : 0; }
+function stars(avg, size){
+  const pct = Math.max(0, Math.min(100, (avg / 5) * 100));
+  return h("span",{class:"stars" + (size ? " " + size : ""), "aria-hidden":"true"},
+    h("span",{class:"stars-bg", text:"★★★★★"}), h("span",{class:"stars-fg", style:`width:${pct}%`, text:"★★★★★"}));
+}
+function ratingLine(key){
+  const r = S.ratings[key];
+  if (!r) return h("div",{class:"rline muted"}, stars(0), h("span",{text:"No ratings yet"}));
+  return h("div",{class:"rline", "aria-label":`Rated ${r.avg.toFixed(1)} out of 5 from ${r.count} ${r.count === 1 ? "rating" : "ratings"}`},
+    stars(r.avg), h("b",{class:"mono", text:r.avg.toFixed(1)}), h("span",{class:"mono", text:`(${r.count})`}));
+}
+function rateBox(key, c){
+  const r = S.ratings[key];
+  const summary = h("div",{class:"rsum"},
+    h("span",{class:"rbig mono", text: r ? r.avg.toFixed(1) : "–"}),
+    h("div",null, stars(r ? r.avg : 0, "lg"), h("div",{class:"label", text: r ? `${r.count} ${r.count === 1 ? "rating" : "ratings"}` : "No ratings yet"})));
+  let you;
+  if (!S.uid) you = h("p",{class:"rnote"}, h("a",{href:"#you", onclick:() => { S.authMode = "login"; }, text:"Sign in"}), " to rate this game.");
+  else if (c.uid === S.uid) you = h("p",{class:"rnote", text:"This is your game, so you can't rate it."});
+  else {
+    const mine = S.mine[key] || 0;
+    const group = h("div",{class:"rate", role:"radiogroup", "aria-label":"Your rating"},
+      [1,2,3,4,5].map(n => h("button",{type:"button", role:"radio", "aria-checked":String(mine === n), "aria-label":`${n} ${n === 1 ? "star" : "stars"}`, class: n <= mine ? "on" : "",
+        onclick:() => rate(key, n), text:"★"})));
+    you = h("div",{class:"ryou"}, h("span",{class:"label", text: mine ? "Your rating" : "Rate this game"}), group,
+      mine ? h("button",{class:"linkbtn rclear", type:"button", onclick:() => rate(key, 0), text:"Clear"}) : null);
+  }
+  return h("div",{class:"ratebox"}, summary, you);
+}
+async function rate(key, score){
+  const prev = S.mine[key];
+  if (score) S.mine[key] = score; else delete S.mine[key];
+  if (S.modal) openModal(S.modal.key, true);
+  try {
+    const j = await api("/api/ratings","POST",{key, score});
+    if (j.rating) S.ratings[key] = j.rating; else delete S.ratings[key];
+    toast(score ? `Rated ${score} ${score === 1 ? "star" : "stars"}` : "Rating cleared");
+  } catch(e){
+    if (prev) S.mine[key] = prev; else delete S.mine[key];
+    apiError(e);
+  }
+  render(true);
 }
 
 /* inline two-step confirm */
@@ -319,6 +371,7 @@ function openModal(key, quiet){
       g.tagline ? h("p",{style:"margin:0;color:var(--muted)", text:g.tagline}) : null,
       h("a",{class:"by", href:"#by-" + c.handle}, avatar(c), h("span",{text:"by " + c.name})),
       g.description ? h("p",{class:"desc", text:g.description}) : null,
+      rateBox(key, c),
       facts.length ? h("div",{class:"facts"}, facts.map(([k,v]) => h("div",null, h("span",{class:"label", text:k}), h("b",{text:v})))) : null,
       h("div",{class:"actions"},
         url ? h("a",{class:"btn primary", href:url, target:"_blank", rel:"noopener noreferrer"}, "Play now ↗") : null,
@@ -393,7 +446,7 @@ function authForm(){
     err.textContent = ""; btn.disabled = true; btn.textContent = signup ? "Creating account…" : "Signing in…";
     try {
       const j = await api("/api/session","POST",{action:signup ? "signup" : "login", email:email.value, password:pw.value});
-      S.uid = j.user.uid; S.email = j.user.email; S.canMod = !!j.canMod;
+      S.uid = j.user.uid; S.email = j.user.email; S.canMod = !!j.canMod; loadMine().then(() => { if (S.modal) openModal(S.modal.key, true); });
       renderAcct(); toast(signup ? "Account created" : "Signed in"); render(true);
     } catch(e2){ err.textContent = e2.message; btn.disabled = false; btn.textContent = signup ? "Create account" : "Sign in"; }
   }},

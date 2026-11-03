@@ -32,6 +32,7 @@ Without Redis variables it uses an in-memory store that resets on restart. To us
 | `api/games.js` | Post, edit, delete games |
 | `api/images.js` | Upload cover and avatar images (resized in the browser, served at `/img/<id>`) |
 | `api/featured.js` | Feature/unfeature games (moderators) |
+| `api/ratings.js` | 1–5 star ratings: one per player per game, averaged per game (you can't rate your own) |
 | `lib/` | Redis client, auth, validation, data helpers |
 
 Notes:

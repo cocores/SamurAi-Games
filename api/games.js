@@ -3,7 +3,7 @@
 import { route, readJson, fail } from "../lib/http.js";
 import { requireUser, isAdmin, newId } from "../lib/auth.js";
 import { cleanGame, MAX_GAMES } from "../lib/validate.js";
-import { getCreator, saveCreator, unfeature, deleteImage } from "../lib/store.js";
+import { getCreator, saveCreator, unfeature, deleteImage, clearRatings } from "../lib/store.js";
 
 export default route({
   async POST(req) {
@@ -45,6 +45,7 @@ export default route({
     await saveCreator(c);
     await deleteImage(game.thumb, uid, true);
     await unfeature(k => k === uid + "~" + game.id);
+    await clearRatings(uid + "~" + game.id);
     return { ok: true };
   },
 });

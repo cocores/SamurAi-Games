@@ -218,6 +218,28 @@ footer.site .wrap{padding-block:20px;display:flex;justify-content:space-between;
 .flinks a{color:var(--ink);font-weight:500;text-decoration:none}
 .flinks a:hover{color:var(--gold);text-decoration:underline}
 .flinks a[aria-current="page"]{color:var(--gold)}
+/* ratings */
+.stars{position:relative;display:inline-block;font-size:14px;line-height:1;letter-spacing:1px;flex:none}
+.stars.lg{font-size:20px}
+.stars-bg{color:var(--line)}
+.stars-fg{position:absolute;inset:0 auto 0 0;overflow:hidden;white-space:nowrap;color:var(--gold)}
+.rline{display:flex;align-items:center;gap:6px;font-size:13px}
+.rline b{font-size:13px}
+.rline span.mono{color:var(--muted);font-size:12px}
+.rline.muted{color:var(--muted)}
+.ratebox{display:flex;gap:18px 28px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;padding:14px 16px;background:var(--bg)}
+.rsum{display:flex;align-items:center;gap:12px}
+.rbig{font-size:34px;font-weight:500;line-height:1}
+.ryou{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rate{display:flex}
+.rate button{background:none;border:0;padding:2px 3px;font-size:26px;line-height:1;color:var(--line);cursor:pointer}
+.rate:hover button{color:var(--gold)}
+.rate button:hover ~ button{color:var(--line)}
+.rate button.on{color:var(--gold)}
+.rclear{font-size:13px;color:var(--muted);text-decoration:underline}
+.rnote{margin:0;color:var(--muted);font-size:14px}
+.rnote a{color:var(--gold);font-weight:700}
+@media (prefers-reduced-motion:no-preference){.rate button{transition:color .1s,transform .1s}.rate button:active{transform:scale(1.2)}}
 /* about page */
 .about-head .wrap{padding-block:40px;display:flex;gap:28px;align-items:center;flex-wrap:wrap;color:var(--on-indigo)}
 .about-head img{width:120px;height:auto;flex:none}

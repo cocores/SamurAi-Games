@@ -5,12 +5,12 @@ import { cmd } from "../lib/redis.js";
 import { route, readJson, fail } from "../lib/http.js";
 import { requireUser, isAdmin } from "../lib/auth.js";
 import { cleanProfile, publicCreator } from "../lib/validate.js";
-import { listCreators, getCreator, saveCreator, getFeatured, unfeature, deleteImage } from "../lib/store.js";
+import { listCreators, getCreator, saveCreator, getFeatured, unfeature, deleteImage, ratingStats, clearRatings } from "../lib/store.js";
 
 export default route({
   async GET() {
-    const [creators, featured] = await Promise.all([listCreators(), getFeatured()]);
-    return { creators: creators.filter(c => c.name && c.handle).map(publicCreator), featured };
+    const [creators, featured, ratings] = await Promise.all([listCreators(), getFeatured(), ratingStats()]);
+    return { creators: creators.filter(c => c.name && c.handle).map(publicCreator), featured, ratings };
   },
 
   async PUT(req) {
@@ -48,6 +48,7 @@ export default route({
     await cmd("SREM", "creators", uid);
     await cmd("DEL", "creator:" + uid);
     await unfeature(k => k.startsWith(uid + "~"));
+    await Promise.all((c.games || []).map(g => clearRatings(uid + "~" + g.id)));
     return { ok: true };
   },
 });
