@@ -116,9 +116,10 @@ async function loadSession(){
 function route(){
   const raw = decodeURIComponent((location.hash || "").replace(/^#/, ""));
   if (raw.startsWith("by-")) { S.view = "profile"; S.handle = raw.slice(3); }
-  else if (raw === "creators" || raw === "you") { S.view = raw; S.handle = null; }
+  else if (raw === "creators" || raw === "you" || raw === "about") { S.view = raw; S.handle = null; }
   else { S.view = "games"; S.handle = null; }
   document.querySelectorAll(".tabs a").forEach(a => { if (a.dataset.view === S.view) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  document.querySelectorAll(".flinks a").forEach(a => { if (a.getAttribute("href") === "#" + S.view) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
   closeModal();
   render(true);
   window.scrollTo(0,0);
@@ -131,7 +132,8 @@ function render(force){
   app.replaceChildren(
     S.view === "games" ? viewGames() :
     S.view === "creators" ? viewCreators() :
-    S.view === "profile" ? viewProfile() : viewYou()
+    S.view === "profile" ? viewProfile() :
+    S.view === "about" ? viewAbout() : viewYou()
   );
   if (S.modal) openModal(S.modal.key, true);
 }
@@ -256,6 +258,39 @@ function viewProfile(){
     h("div",{class:"sec"}, h("h2",{text:"Games"}), h("span",{class:"label mono", text:games.length + (games.length === 1 ? " game" : " games")})),
     games.length ? h("div",{class:"grid"}, games.map(g => gameCard({g, c, key:c.uid + "~" + g.id}, S.featured.includes(c.uid + "~" + g.id)))) :
       h("div",{class:"empty"}, h("h3",{text:"Nothing posted yet"}), h("p",{text: c.uid === S.uid ? "Your games will appear here once you post them." : "Check back soon."}))));
+}
+
+function viewAbout(){
+  const games = allGames().length, makers = S.creators.size;
+  const head = h("section",{class:"about-head wave"}, h("div",{class:"wrap"},
+    h("img",{src:"/brand/samurai-mark-light.png", alt:"", width:"120", height:"146"}),
+    h("div",{class:"txt"},
+      h("span",{class:"kind", style:"color:#f2d68c", text:"About"}),
+      h("h1",{text:"About SamurAi Games"}),
+      h("p",{text:"SamurAi Games is an open arcade for browser games built with Claude. It gives studios, companies and solo makers one place to show what they've made, and gives players one place to find it."}))));
+  const faq = [
+    ["Who can post?", "Anyone with an account. Create one from Your profile, choose whether you're a studio or company or a solo maker, and you can start posting."],
+    ["Where are the games hosted?", "Makers host their own games, for example as a published Claude artifact or on their own site. SamurAi Games lists them and links out, so you always play the maker's own version."],
+    ["What can I post?", "Games you made, or helped make, with Claude. Each listing needs a title and an https play link; a cover image, description, genre and controls help people find it."],
+    ["How are games featured?", "The arcade's moderators pick a few games for the Featured row. They can also remove listings or profiles that break the rules or don't work."],
+    ["Can I change or remove my games?", "Yes. Open Your profile to edit any listing, swap its cover image or delete it. Changes show up straight away."],
+  ];
+  return h("div",null, head, h("main",{class:"wrap"},
+    h("div",{class:"about"},
+      h("section",{class:"panel"},
+        h("h2",{text:"What it is"}),
+        h("p",{text:"Claude has made it possible to go from an idea to a playable game in an afternoon. Those games tend to end up scattered across chats, links and personal sites. SamurAi Games collects them in one arcade where they're easy to browse, search and share."}),
+        h("p",null, "Right now the arcade lists ", h("b",{class:"mono", text:String(games)}), games === 1 ? " game" : " games", " from ", h("b",{class:"mono", text:String(makers)}), makers === 1 ? " maker." : " makers.")),
+      h("section",{class:"panel"},
+        h("h2",{text:"Post your game"}),
+        h("ol",{class:"steps"},
+          h("li",{text:"Create an account from Your profile."}),
+          h("li",{text:"Set up a studio, company or solo-maker profile with a name, logo and short bio."}),
+          h("li",{text:"Post a game: paste its play link, add a cover image and pick a genre."})),
+        h("div",{class:"actions", style:"margin-top:16px"}, h("a",{class:"btn primary", href:"#you"}, me() ? "Post a game" : "Create your profile"), h("a",{class:"btn", href:"#games"}, "Browse games")))),
+    h("section",{class:"panel", style:"margin-top:20px"},
+      h("h2",{style:"margin-bottom:14px", text:"Questions"}),
+      h("div",{class:"faq"}, faq.map(([q,a]) => h("div",null, h("h3",{text:q}), h("p",{text:a})))))));
 }
 
 /* inline two-step confirm */

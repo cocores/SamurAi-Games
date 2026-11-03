@@ -213,7 +213,25 @@ img{max-width:100%}
 .field input[type=email],.field input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:9px 11px;width:100%;min-width:0}
 .field input[type=email]:focus,.field input[type=password]:focus{border-color:var(--gold);outline:none}
 footer.site{border-top:1px solid var(--line);color:var(--muted);font-size:13px}
-footer.site .wrap{padding-block:20px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+footer.site .wrap{padding-block:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.flinks{display:flex;gap:18px;flex-wrap:wrap}
+.flinks a{color:var(--ink);font-weight:500;text-decoration:none}
+.flinks a:hover{color:var(--gold);text-decoration:underline}
+.flinks a[aria-current="page"]{color:var(--gold)}
+/* about page */
+.about-head .wrap{padding-block:40px;display:flex;gap:28px;align-items:center;flex-wrap:wrap;color:var(--on-indigo)}
+.about-head img{width:120px;height:auto;flex:none}
+.about-head .txt{flex:1 1 320px;min-width:0}
+.about-head h1{font-size:clamp(30px,5vw,48px)}
+.about-head p{margin:10px 0 0;color:var(--on-indigo-muted);max-width:60ch;font-size:16px}
+.about{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+@media (max-width:760px){.about{grid-template-columns:minmax(0,1fr)}}
+.about .panel p{margin:0 0 10px;max-width:65ch}
+.about .panel p:last-child{margin-bottom:0}
+.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.faq{display:flex;flex-direction:column;gap:14px}
+.faq h3{font-family:var(--body);font-weight:700;font-size:15px;margin-bottom:4px}
+.faq p{margin:0;color:var(--muted);max-width:70ch}
 </style>
 </head>
 <body>
@@ -229,7 +247,7 @@ footer.site .wrap{padding-block:20px;display:flex;justify-content:space-between;
   </div>
 </header>
 <div id="app"></div>
-<footer class="site"><div class="wrap"><span>SamurAi Games · an open arcade for games made with Claude</span><span class="mono">Games are hosted by their makers</span></div></footer>
+<footer class="site"><div class="wrap"><span>SamurAi Games · an open arcade for games made with Claude</span><nav class="flinks" aria-label="Footer"><a href="#about">About</a><a href="#creators">Creators</a><a href="#you">Post a game</a></nav></div></footer>
 <div id="overlay" class="overlay" hidden></div>
 <div id="toast" class="toast" role="status" hidden></div>
 <script src="/app.js"></script>
