@@ -107,7 +107,7 @@ async function load(){
   render();
 }
 async function loadSession(){
-  try { const j = await api("/api/session"); S.uid = j.user ? j.user.uid : null; S.email = j.user ? j.user.email : null; S.canMod = !!j.canMod; if (S.uid) await loadMine(); }
+  try { const j = await api("/api/session"); setUser(j); if (S.uid) await loadMine(); }
   catch { S.uid = null; }
   S.sessionKnown = true;
   renderAcct();
@@ -158,9 +158,14 @@ function renderAcct(){
   if (S.uid) el.replaceChildren(h("span",{class:"who", title:S.email, text:S.email}), h("button",{type:"button", onclick:signOut, text:"Sign out"}));
   else el.replaceChildren(h("button",{type:"button", onclick:() => { S.authMode = "login"; location.hash = "#you"; render(true); }, text:"Sign in"}));
 }
+function setUser(j){
+  S.uid = j.user ? j.user.uid : null; S.email = j.user ? j.user.email : null;
+  S.emailVerified = !!(j.user && j.user.emailVerified); S.canMod = !!j.canMod;
+}
 async function signOut(){
   try { await api("/api/session","POST",{action:"logout"}); } catch {}
-  S.uid = null; S.email = null; S.canMod = false; S.mine = {}; S.edit = null; S.profDraft = null; S.dirty = false;
+  try { const fa = window.samuraiAuth; if (fa) await fa.signOut(); } catch {}
+  S.uid = null; S.email = null; S.emailVerified = false; S.canMod = false; S.mine = {}; S.edit = null; S.profDraft = null; S.dirty = false;
   renderAcct(); render(true); toast("Signed out");
 }
 
@@ -417,6 +422,7 @@ function viewYou(){
   const wrap = h("main",{class:"wrap"}, statusNotice());
   if (!S.sessionKnown || !S.ready) return wrap;
   if (!S.uid) { wrap.append(authForm()); return wrap; }
+  const vn = verifyNotice(); if (vn) wrap.append(vn);
   const mine = me();
   if (!mine || S.profDraft) { wrap.append(profileForm(mine)); return wrap; }
 
@@ -447,33 +453,114 @@ function field(label, input, hint, full){
 }
 function markDirty(){ S.dirty = true; }
 
+/* ---------- sign in / sign up (Firebase Auth, see src/firebase.js) ---------- */
+function firebaseAuth(){
+  if (window.samuraiAuth) return Promise.resolve(window.samuraiAuth);
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("Sign-in couldn't load. Check your connection and reload the page.")), 12000);
+    window.addEventListener("samurai-auth-ready", () => { clearTimeout(t); resolve(window.samuraiAuth); }, {once:true});
+  });
+}
+const AUTH_ERRORS = {
+  "auth/email-already-in-use": "An account with that email already exists. Sign in instead.",
+  "auth/invalid-email": "Enter a valid email address.",
+  "auth/weak-password": "Use a stronger password of at least 8 characters.",
+  "auth/missing-password": "Enter your password.",
+  "auth/invalid-credential": "That email and password don't match.",
+  "auth/invalid-login-credentials": "That email and password don't match.",
+  "auth/wrong-password": "That email and password don't match.",
+  "auth/user-not-found": "That email and password don't match.",
+  "auth/user-disabled": "This account has been disabled.",
+  "auth/too-many-requests": "Too many attempts. Wait a few minutes and try again.",
+  "auth/network-request-failed": "Can't reach the sign-in service. Check your connection and try again.",
+  "auth/popup-blocked": "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.",
+  "auth/account-exists-with-different-credential": "That email already has an account with a different sign-in method. Use that method instead.",
+  "auth/operation-not-allowed": "This sign-in method isn't turned on yet. The site owner needs to enable it in Firebase.",
+  "auth/no-current-user": "Sign in again to continue.",
+  "auth/unauthorized-domain": "Sign-in isn't set up for this web address yet. The site owner needs to add it in Firebase.",
+};
+const SILENT = new Set(["auth/popup-closed-by-user", "auth/cancelled-popup-request", "auth/user-cancelled"]);
+function authMessage(e){ return (e && AUTH_ERRORS[e.code]) || (e && e.message && !String(e.code||"").startsWith("auth/") ? e.message : "Sign-in didn't work. Try again."); }
+
+// Firebase proves who the person is; /api/session turns that into a site session.
+async function completeSignIn(res, method){
+  const j = await api("/api/session","POST",{action:"firebase", idToken:res.token});
+  setUser(j);
+  loadMine().then(() => { if (S.modal) openModal(S.modal.key, true); });
+  renderAcct(); render(true);
+  toast(res.isNew ? "Account created" : "Signed in");
+  track(res.isNew ? "sign_up" : "login", {method});
+}
+
+const GOOGLE_G = '<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+
 function authForm(){
   const signup = S.authMode === "signup";
   const email = h("input",{type:"email", id:"a-email", autocomplete:"email", required:true, placeholder:"you@studio.com"});
   const pw = h("input",{type:"password", id:"a-pw", autocomplete:signup ? "new-password" : "current-password", required:true, minlength:signup ? "8" : null});
   const err = h("small",{style:"color:var(--seal)", role:"alert"});
+  const note = h("small",{style:"color:var(--ok)", role:"status"});
   const btn = h("button",{class:"btn primary", type:"submit", text: signup ? "Create account" : "Sign in"});
+  const busy = (on, label) => { btn.disabled = on; gbtn.disabled = on; if (label) btn.textContent = label; };
+
+  const gbtn = h("button",{class:"btn gbtn", type:"button", onclick:async () => {
+    err.textContent = ""; note.textContent = ""; busy(true);
+    try { const fa = await firebaseAuth(); await completeSignIn(await fa.google(), "google"); }
+    catch(e){ if (!SILENT.has(e && e.code)) err.textContent = authMessage(e); busy(false); }
+  }});
+  gbtn.innerHTML = GOOGLE_G;
+  gbtn.append(document.createTextNode("Continue with Google"));
+
   const form = h("form",{class:"form", novalidate:true, onsubmit:async e => {
     e.preventDefault();
+    note.textContent = "";
     if (!email.value.trim()) return err.textContent = "Enter your email address.";
     if (signup && pw.value.length < 8) return err.textContent = "Use a password of at least 8 characters.";
-    err.textContent = ""; btn.disabled = true; btn.textContent = signup ? "Creating account…" : "Signing in…";
+    err.textContent = ""; busy(true, signup ? "Creating account…" : "Signing in…");
     try {
-      const j = await api("/api/session","POST",{action:signup ? "signup" : "login", email:email.value, password:pw.value});
-      S.uid = j.user.uid; S.email = j.user.email; S.canMod = !!j.canMod; loadMine().then(() => { if (S.modal) openModal(S.modal.key, true); });
-      renderAcct(); toast(signup ? "Account created" : "Signed in"); render(true);
-      track(signup ? "sign_up" : "login", {method:"email"});
-    } catch(e2){ err.textContent = e2.message; btn.disabled = false; btn.textContent = signup ? "Create account" : "Sign in"; }
+      const fa = await firebaseAuth();
+      const res = signup ? await fa.signUp(email.value.trim(), pw.value) : await fa.signIn(email.value.trim(), pw.value);
+      await completeSignIn(res, "password");
+    } catch(e2){ err.textContent = authMessage(e2); busy(false, signup ? "Create account" : "Sign in"); }
   }},
     field("Email", email),
     field("Password", pw, signup ? "At least 8 characters." : null),
-    h("div",null, err, h("div",{class:"actions"}, btn)));
+    h("div",null, err, note, h("div",{class:"actions"}, btn,
+      signup ? null : h("button",{class:"linkbtn forgot", type:"button", text:"Forgot password?", onclick:async () => {
+        err.textContent = ""; note.textContent = "";
+        if (!email.value.trim()) { err.textContent = "Enter your email above, then choose Forgot password."; return; }
+        try { const fa = await firebaseAuth(); await fa.resetPassword(email.value.trim()); note.textContent = "If there's an account for that email, a reset link is on its way."; }
+        catch(e3){ if (e3 && e3.code === "auth/user-not-found") note.textContent = "If there's an account for that email, a reset link is on its way."; else err.textContent = authMessage(e3); }
+      }}))));
   return h("div",{class:"panel auth"},
     h("h2",{text: signup ? "Join the arcade" : "Welcome back"}),
     h("p",{class:"sub", text: signup ? "Create an account to set up a studio or maker profile and post your games." : "Sign in to manage your profile and games."}),
+    gbtn,
+    h("div",{class:"or"}, h("span",{text:"or use email"})),
     form,
     h("p",{class:"switch"}, signup ? "Already have an account? " : "New here? ",
       h("button",{type:"button", onclick:() => { S.authMode = signup ? "login" : "signup"; render(true); }, text: signup ? "Sign in" : "Create an account"})));
+}
+
+function verifyNotice(){
+  if (!S.uid || S.emailVerified) return null;
+  const msg = h("span",{text:" We sent a link to " + S.email + ". Verifying keeps your account recoverable."});
+  const status = h("span",{role:"status"});
+  return h("div",{class:"notice verify"},
+    h("b",{text:"Verify your email."}), msg,
+    h("span",{class:"vactions"},
+      h("button",{class:"btn sm", type:"button", text:"I've verified it", onclick:async () => {
+        try {
+          const fa = await firebaseAuth(); const r = await fa.refresh();
+          if (!r.emailVerified) { status.textContent = " Not verified yet. Open the link in the email first."; return; }
+          setUser(await api("/api/session","POST",{action:"firebase", idToken:r.token})); renderAcct(); render(true); toast("Email verified");
+        } catch(e){ status.textContent = " " + authMessage(e); }
+      }}),
+      h("button",{class:"btn sm ghost", type:"button", text:"Resend email", onclick:async () => {
+        try { const fa = await firebaseAuth(); await fa.resendVerification(); status.textContent = " Sent. Check your inbox."; }
+        catch(e){ status.textContent = " " + authMessage(e); }
+      }})),
+    status);
 }
 
 /* Resize in the browser so uploads stay small, then send to /api/images. */

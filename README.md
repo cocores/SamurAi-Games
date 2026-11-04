@@ -11,10 +11,21 @@ Plain HTML/JS front end plus Vercel serverless functions, with Upstash Redis for
 3. **Add environment variables** under **Settings → Environment Variables**:
    - `SESSION_SECRET`: a long random string that signs login cookies. Generate one with
      `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-   - `ADMIN_EMAILS`: comma-separated emails of moderators (e.g. your own). Those accounts can feature and remove games and profiles.
+   - `ADMIN_EMAILS`: comma-separated emails of moderators (e.g. your own). Those accounts can feature and remove games and profiles once the email is verified.
+   - Also turn on Firebase sign-in (see **Firebase** below).
 4. **Redeploy** so the new variables take effect. Then open the site, go to **Your profile**, and create your account using an email listed in `ADMIN_EMAILS`.
 
-## Firebase (Analytics)
+## Firebase (sign-in and Analytics)
+
+**Turn on sign-in** in the [Firebase console](https://console.firebase.google.com/project/samurai-10ad7/authentication/providers) for project `samurai-10ad7`:
+
+1. **Authentication → Sign-in method**: enable **Email/Password** and **Google**.
+2. **Authentication → Settings → Authorized domains**: add your Vercel domain (e.g. `samurai-games.vercel.app`) and any custom domain. `localhost` is allowed by default.
+3. Optional: **Authentication → Templates** to customize the verification and password-reset emails.
+
+People sign in with Google or with email and password (with email verification and password reset). The browser signs in through Firebase, then `api/session.js` checks the Firebase ID token against Google's public keys (project, issuer, expiry, signature) and starts the site's own session. Moderators listed in `ADMIN_EMAILS` only get their rights once Firebase has verified that email, so the easiest path is signing in with Google.
+
+**Analytics:**
 
 `src/firebase.js` initializes the Firebase project `samurai-10ad7` and Google Analytics. `npm run build` bundles it into `public/firebase.js` (Vercel runs this on every deploy; the output isn't committed). Besides page views, the site logs `sign_up`, `login`, `post_game`, `play_game` and `rate_game` events. See them in the Firebase console under Analytics (Realtime and DebugView).
 
@@ -34,7 +45,7 @@ Without Redis variables it uses an in-memory store that resets on restart. To us
 | Path | What it does |
 | --- | --- |
 | `public/index.html`, `public/app.js` | The site: games grid, creators, profile pages, account and posting forms |
-| `api/session.js` | Sign up, sign in, sign out (scrypt-hashed passwords, signed HttpOnly cookie) |
+| `api/session.js` | Turns a verified Firebase Auth sign-in into a site session (signed HttpOnly cookie); sign out |
 | `api/creators.js` | List all creators and games; create/update/delete your profile |
 | `api/games.js` | Post, edit, delete games |
 | `api/images.js` | Upload cover and avatar images (resized in the browser, served at `/img/<id>`) |

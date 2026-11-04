@@ -1,12 +1,15 @@
-// GET: who is signed in. POST {action: "signup" | "login" | "logout", email, password}
+// GET: who is signed in.
+// POST {action: "firebase", idToken}: exchange a Firebase Auth ID token for a site session.
+// POST {action: "logout"}: end the site session.
 import { cmd, getJson, setJson } from "../lib/redis.js";
 import { route, readJson, fail } from "../lib/http.js";
-import { currentUser, setSession, clearSession, hashPassword, verifyPassword, isAdmin, limit, newId } from "../lib/auth.js";
-
-const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+import { currentUser, setSession, clearSession, isAdmin, limit, newId } from "../lib/auth.js";
+import { verifyIdToken } from "../lib/firebase-token.js";
 
 function view(user) {
-  return user ? { user: { uid: user.uid, email: user.email }, canMod: isAdmin(user) } : { user: null, canMod: false };
+  return user
+    ? { user: { uid: user.uid, email: user.email, emailVerified: !!user.emailVerified }, canMod: isAdmin(user) }
+    : { user: null, canMod: false };
 }
 
 export default route({
@@ -16,33 +19,35 @@ export default route({
 
   async POST(req, res) {
     const body = await readJson(req);
-    const action = body.action;
 
-    if (action === "logout") { clearSession(res); return view(null); }
+    if (body.action === "logout") { clearSession(res); return view(null); }
 
-    const email = String(body.email || "").trim().toLowerCase();
-    const password = String(body.password || "");
-    if (!EMAIL.test(email)) fail(400, "Enter a valid email address.");
+    if (body.action === "firebase") {
+      await limit(req, "login", 30, 900);
+      const t = await verifyIdToken(body.idToken);
+      const email = typeof t.email === "string" ? t.email.trim().toLowerCase() : "";
+      const verified = t.email_verified === true;
+      if (!email) fail(400, "Your account needs an email address to sign in here.");
 
-    if (action === "signup") {
-      await limit(req, "signup", 10, 3600);
-      if (password.length < 8) fail(400, "Use a password of at least 8 characters.");
-      if (password.length > 200) fail(400, "That password is too long.");
-      const uid = newId("u");
-      const claimed = await cmd("SET", "email:" + email, uid, "NX");
-      if (claimed !== "OK") fail(409, "An account with that email already exists. Sign in instead.");
-      const user = { uid, email, pass: await hashPassword(password), createdAt: Date.now() };
+      // One site account per Firebase user. An account created before Firebase sign-in
+      // is linked only when Firebase has verified that the person owns the email.
+      let uid = await cmd("GET", "fb:" + t.sub);
+      if (!uid) {
+        const legacy = verified ? await cmd("GET", "email:" + email) : null;
+        const candidate = legacy || newId("u");
+        await cmd("SET", "fb:" + t.sub, candidate, "NX");
+        uid = await cmd("GET", "fb:" + t.sub);
+      }
+
+      const now = Date.now();
+      const user = (await getJson("user:" + uid)) || { uid, createdAt: now };
+      delete user.pass;
+      Object.assign(user, {
+        uid, firebaseUid: t.sub, email, emailVerified: verified,
+        provider: (t.firebase && t.firebase.sign_in_provider) || "", lastSignInAt: now,
+      });
       await setJson("user:" + uid, user);
       setSession(res, uid);
-      return view(user);
-    }
-
-    if (action === "login") {
-      await limit(req, "login", 20, 900);
-      const uid = await cmd("GET", "email:" + email);
-      const user = uid ? await getJson("user:" + uid) : null;
-      if (!user || !(await verifyPassword(password, user.pass))) fail(401, "That email and password don't match.");
-      setSession(res, user.uid);
       return view(user);
     }
 

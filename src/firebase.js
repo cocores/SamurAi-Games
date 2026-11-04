@@ -3,6 +3,10 @@
 // it doesn't grant access. Access is controlled by Firebase security rules.
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported, logEvent } from "firebase/analytics";
+import {
+  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup,
+  GoogleAuthProvider, sendEmailVerification, sendPasswordResetEmail, getAdditionalUserInfo, signOut,
+} from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBy4QD9ibGrasXJ5Q3UlLJv6FAmzeZd7WY",
@@ -33,3 +37,38 @@ isSupported()
     for (const [name, params] of pending.splice(0)) logEvent(analytics, name, params);
   })
   .catch(() => {});
+
+// Sign-in. app.js calls these, then sends the returned ID token to /api/session,
+// which verifies it and starts the site session.
+const auth = getAuth(app);
+const result = async cred => ({
+  token: await cred.user.getIdToken(),
+  isNew: !!(getAdditionalUserInfo(cred) || {}).isNewUser,
+  emailVerified: cred.user.emailVerified,
+});
+window.samuraiAuth = {
+  async signUp(email, password) {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    try { await sendEmailVerification(cred.user); } catch {}
+    return result(cred);
+  },
+  signIn: async (email, password) => result(await signInWithEmailAndPassword(auth, email, password)),
+  async google() {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    return result(await signInWithPopup(auth, provider));
+  },
+  resetPassword: email => sendPasswordResetEmail(auth, email),
+  async resendVerification() {
+    if (!auth.currentUser) throw Object.assign(new Error("Sign in again to resend the email."), { code: "auth/no-current-user" });
+    await sendEmailVerification(auth.currentUser);
+  },
+  // After the person clicks the link in the verification email.
+  async refresh() {
+    if (!auth.currentUser) throw Object.assign(new Error("Sign in again to continue."), { code: "auth/no-current-user" });
+    await auth.currentUser.reload();
+    return { token: await auth.currentUser.getIdToken(true), emailVerified: auth.currentUser.emailVerified };
+  },
+  signOut: () => signOut(auth),
+};
+window.dispatchEvent(new Event("samurai-auth-ready"));
