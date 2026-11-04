@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": "22.x"
   },
   "scripts": {
     "build": "esbuild src/firebase.js --bundle --format=esm --minify --target=es2020 --outfile=public/firebase.js",

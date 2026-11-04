@@ -52,9 +52,17 @@ async function api(path, method="GET", body){
   if (method !== "GET") S.freshUntil = Date.now() + 60000;
   let r;
   try { r = await fetch(path, opts); } catch { throw new Error("Can't reach the server. Check your connection and try again."); }
-  let j = {};
-  try { j = await r.json(); } catch {}
-  if (!r.ok) { const e = new Error(j.error || "Something went wrong. Try again."); e.status = r.status; throw e; }
+  let j = {}, parsed = false;
+  try { j = await r.json(); parsed = j && typeof j === "object"; } catch {}
+  if (!parsed) j = {};
+  if (r.ok && !parsed) throw Object.assign(new Error("The site's server sent an unexpected reply. Reload the page, and if it keeps happening, check the latest deploy in Vercel."), {status:r.status});
+  if (!r.ok) {
+    // j.error is the site's own message. Without one, the server crashed or isn't deployed.
+    const msg = j.error || (r.status === 404
+      ? "The site's server isn't deployed (error 404). Check that the latest deploy finished in Vercel."
+      : `The site's server hit an error before it could answer (error ${r.status}). The site owner can see the details in Vercel's function logs.`);
+    const e = new Error(msg); e.status = r.status; throw e;
+  }
   return j;
 }
 function apiError(e){
