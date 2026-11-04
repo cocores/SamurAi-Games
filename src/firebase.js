@@ -10,7 +10,11 @@ import {
 
 const firebaseConfig = {
   apiKey: "AIzaSyBy4QD9ibGrasXJ5Q3UlLJv6FAmzeZd7WY",
-  authDomain: "samurai-10ad7.firebaseapp.com",
+  // On the live site, sign-in runs through this site's own domain: vercel.json passes
+  // /__/auth/* through to Firebase. That keeps the Google sign-in window, Firebase's helper
+  // frame and the page on one site, so browsers that isolate other sites' frames (Chrome,
+  // Safari) don't stop the sign-in result from coming back. Local dev uses firebaseapp.com.
+  authDomain: /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "samurai-10ad7.firebaseapp.com" : location.host,
   projectId: "samurai-10ad7",
   storageBucket: "samurai-10ad7.firebasestorage.app",
   messagingSenderId: "782464743925",
