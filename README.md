@@ -19,6 +19,7 @@ In the [Firebase console](https://console.firebase.google.com/project/samurai-10
 1. **Import the repo** at [vercel.com/new](https://vercel.com/new). Leave the framework preset as **Other**; `vercel.json` handles the build and output folder.
 2. **Settings → Environment Variables** (for Production, and Preview if you use it):
    - `FIREBASE_SERVICE_ACCOUNT`: paste the **entire contents** of the JSON key file from step 4 above.
+     If pasting the whole file gives trouble, you can instead add two variables taken from it: `FIREBASE_CLIENT_EMAIL` (the `client_email` value) and `FIREBASE_PRIVATE_KEY` (the `private_key` value, from `-----BEGIN` to `-----END PRIVATE KEY-----\n`).
    - `ADMIN_EMAILS`: comma-separated moderator emails (e.g. your own). They only count once Firebase has verified the email, so sign in with Google or verify your email.
 3. **Redeploy** so the variables take effect, then sign in on the site with an email from `ADMIN_EMAILS`.
 
