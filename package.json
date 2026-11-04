@@ -2,8 +2,13 @@
   "name": "samurai-games",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs"
+  },
+  "dependencies": {
+    "firebase": "^13.2.0"
   }
 }
