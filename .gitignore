@@ -4,3 +4,5 @@ node_modules
 .vercel
 # built by `npm run build` from src/firebase.js
 public/firebase.js
+# Firebase emulator logs
+*-debug.log
