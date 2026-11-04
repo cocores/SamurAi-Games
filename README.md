@@ -2,7 +2,7 @@
 
 An open arcade for games made with Claude. Anyone can browse and play. People create an account, set up a **studio/company** or **solo maker** profile, and post games (a play link plus cover art, genre, controls and more). Moderators can feature games and remove anything.
 
-Plain HTML/JS front end plus Vercel serverless functions, with Upstash Redis for storage. No build step and no npm dependencies.
+Plain HTML/JS front end plus Vercel serverless functions, with Upstash Redis for storage and Firebase for analytics. The only build step bundles Firebase with esbuild.
 
 ## Deploy to Vercel
 
@@ -14,10 +14,17 @@ Plain HTML/JS front end plus Vercel serverless functions, with Upstash Redis for
    - `ADMIN_EMAILS`: comma-separated emails of moderators (e.g. your own). Those accounts can feature and remove games and profiles.
 4. **Redeploy** so the new variables take effect. Then open the site, go to **Your profile**, and create your account using an email listed in `ADMIN_EMAILS`.
 
+## Firebase (Analytics)
+
+`src/firebase.js` initializes the Firebase project `samurai-10ad7` and Google Analytics. `npm run build` bundles it into `public/firebase.js` (Vercel runs this on every deploy; the output isn't committed). Besides page views, the site logs `sign_up`, `login`, `post_game`, `play_game` and `rate_game` events. See them in the Firebase console under Analytics (Realtime and DebugView).
+
+The Firebase web config in that file is public by design; it identifies the project and doesn't grant access.
+
 ## Run locally
 
 ```sh
-npm run dev   # http://localhost:3000
+npm install
+npm run dev   # builds the Firebase bundle, then serves http://localhost:3000
 ```
 
 Without Redis variables it uses an in-memory store that resets on restart. To use your real database locally, copy `.env.example` to `.env`, fill it in, and run `node --env-file=.env scripts/dev.mjs`.

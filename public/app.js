@@ -113,6 +113,16 @@ async function loadSession(){
   renderAcct();
 }
 
+/* ---------- analytics (Firebase, see src/firebase.js) ---------- */
+window.samuraiTrackQueue = window.samuraiTrackQueue || [];
+function track(name, params){
+  try {
+    if (typeof window.samuraiTrack === "function") window.samuraiTrack(name, params);
+    else if (window.samuraiTrackQueue.length < 100) window.samuraiTrackQueue.push([name, params]);
+  } catch {}
+}
+let firstRoute = true;
+
 /* ---------- routing ---------- */
 function route(){
   const raw = decodeURIComponent((location.hash || "").replace(/^#/, ""));
@@ -124,6 +134,9 @@ function route(){
   closeModal();
   render(true);
   window.scrollTo(0,0);
+  // Analytics logs the first page view itself; log in-page navigation here.
+  if (firstRoute) firstRoute = false;
+  else track("page_view", {page_title: document.title, page_location: location.href, page_path: "/" + location.hash});
 }
 
 /* ---------- render ---------- */
@@ -217,7 +230,7 @@ function gameCard({g,c,key}, featured){
       h("div",{class:"meta"}, g.genre ? h("span",{class:"tag", text:g.genre}) : null, (g.controls||[]).slice(0,3).map(x => h("span",{class:"tag", text:x}))),
       h("div",{class:"foot"},
         h("a",{class:"by", href:"#by-" + c.handle, title:c.name}, avatar(c), h("span",{text:c.name})),
-        url ? h("a",{class:"btn primary sm", href:url, target:"_blank", rel:"noopener noreferrer"}, "Play ↗") : null)));
+        url ? h("a",{class:"btn primary sm", href:url, target:"_blank", rel:"noopener noreferrer", onclick:() => track("play_game", {game_id:key, game_title:g.title})}, "Play ↗") : null)));
 }
 
 function viewCreators(){
@@ -338,6 +351,7 @@ async function rate(key, score){
     const j = await api("/api/ratings","POST",{key, score});
     if (j.rating) S.ratings[key] = j.rating; else delete S.ratings[key];
     toast(score ? `Rated ${score} ${score === 1 ? "star" : "stars"}` : "Rating cleared");
+    if (score) track("rate_game", {game_id:key, score});
   } catch(e){
     if (prev) S.mine[key] = prev; else delete S.mine[key];
     apiError(e);
@@ -374,7 +388,7 @@ function openModal(key, quiet){
       rateBox(key, c),
       facts.length ? h("div",{class:"facts"}, facts.map(([k,v]) => h("div",null, h("span",{class:"label", text:k}), h("b",{text:v})))) : null,
       h("div",{class:"actions"},
-        url ? h("a",{class:"btn primary", href:url, target:"_blank", rel:"noopener noreferrer"}, "Play now ↗") : null,
+        url ? h("a",{class:"btn primary", href:url, target:"_blank", rel:"noopener noreferrer", onclick:() => track("play_game", {game_id:key, game_title:g.title})}, "Play now ↗") : null,
         url ? h("button",{class:"btn", type:"button", onclick:() => copy(url)}, "Copy game link") : null,
         S.canMod ? h("button",{class:"btn ghost", type:"button", onclick:() => toggleFeature(key), text: isFeat ? "Unfeature" : "Feature"}) : null,
         S.canMod || c.uid === S.uid ? modControl("g:" + key, "Remove game", async () => {
@@ -448,6 +462,7 @@ function authForm(){
       const j = await api("/api/session","POST",{action:signup ? "signup" : "login", email:email.value, password:pw.value});
       S.uid = j.user.uid; S.email = j.user.email; S.canMod = !!j.canMod; loadMine().then(() => { if (S.modal) openModal(S.modal.key, true); });
       renderAcct(); toast(signup ? "Account created" : "Signed in"); render(true);
+      track(signup ? "sign_up" : "login", {method:"email"});
     } catch(e2){ err.textContent = e2.message; btn.disabled = false; btn.textContent = signup ? "Create account" : "Sign in"; }
   }},
     field("Email", email),
@@ -565,7 +580,7 @@ function gameForm(d){
     err.textContent = ""; save.disabled = true; save.textContent = "Saving…";
     try {
       await api("/api/games","POST",{game:{id:d.id || undefined, title:d.title, tagline:d.tagline, url:d.url, description:d.description, genre:d.genre, controls:d.controls, length:d.length, builtWith:d.builtWith, thumb:d.thumb}});
-      toast(d.id ? "Game updated" : "Game posted"); S.edit = null; S.dirty = false; await load();
+      toast(d.id ? "Game updated" : "Game posted"); if (!d.id) track("post_game", {genre:d.genre}); S.edit = null; S.dirty = false; await load();
     } catch(e2){ err.textContent = e2.message; save.disabled = false; save.textContent = d.id ? "Save changes" : "Post game"; }
   }},
     field("Title", title),

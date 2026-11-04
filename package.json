@@ -6,9 +6,13 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "node scripts/dev.mjs"
+    "build": "esbuild src/firebase.js --bundle --format=esm --minify --target=es2020 --outfile=public/firebase.js",
+    "dev": "npm run build && node scripts/dev.mjs"
   },
   "dependencies": {
     "firebase": "^13.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }
