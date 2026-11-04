@@ -1,15 +1,19 @@
-// GET: every creator with their games, plus featured keys (public).
+// GET: every creator with their games, featured keys and rating totals (public, cached briefly).
 // PUT {profile}: create or update your own profile.
 // DELETE {uid}: remove a profile (your own, or anyone's for moderators).
-import { cmd } from "../lib/redis.js";
-import { route, readJson, fail } from "../lib/http.js";
+import { route, readJson, fail, query } from "../lib/http.js";
 import { requireUser, isAdmin } from "../lib/auth.js";
 import { cleanProfile, publicCreator } from "../lib/validate.js";
-import { listCreators, getCreator, saveCreator, getFeatured, unfeature, deleteImage, ratingStats, clearRatings } from "../lib/store.js";
+import {
+  listCreators, getCreator, saveCreator, deleteCreatorDoc, claimHandle, releaseHandle,
+  getFeatured, unfeature, deleteImage, ratingStats, clearRatings,
+} from "../lib/store.js";
 
 export default route({
-  async GET() {
+  async GET(req, res) {
     const [creators, featured, ratings] = await Promise.all([listCreators(), getFeatured(), ratingStats()]);
+    // Visitors share a 15-second CDN copy; someone who just changed something asks with ?fresh.
+    if (!query(req).fresh) res.setHeader("Cache-Control", "public, max-age=0, s-maxage=15, stale-while-revalidate=60");
     return { creators: creators.filter(c => c.name && c.handle).map(publicCreator), featured, ratings };
   },
 
@@ -21,17 +25,12 @@ export default route({
     if (p.handle.length < 2) fail(400, "Pick a page address of at least 2 letters or numbers.");
 
     const cur = await getCreator(user.uid);
-    if (!cur || cur.handle !== p.handle) {
-      const ok = await cmd("SET", "handle:" + p.handle, user.uid, "NX");
-      if (ok !== "OK" && (await cmd("GET", "handle:" + p.handle)) !== user.uid) fail(409, "That page address is taken. Try another.");
-      if (cur && cur.handle) await cmd("DEL", "handle:" + cur.handle);
-    }
+    if (!cur || cur.handle !== p.handle) await claimHandle(p.handle, user.uid, cur && cur.handle);
     if (cur && cur.avatar && cur.avatar !== p.avatar) await deleteImage(cur.avatar, user.uid);
 
     const now = Date.now();
     const next = { ...(cur || { games: [], createdAt: now }), ...p, uid: user.uid, updatedAt: now };
     await saveCreator(next);
-    await cmd("SADD", "creators", user.uid);
     return { creator: publicCreator(next) };
   },
 
@@ -39,16 +38,14 @@ export default route({
     const user = await requireUser(req);
     const body = await readJson(req);
     const uid = String(body.uid || user.uid);
-    const mod = isAdmin(user);
-    if (uid !== user.uid && !mod) fail(403, "You can only remove your own profile.");
+    if (uid !== user.uid && !isAdmin(user)) fail(403, "You can only remove your own profile.");
     const c = await getCreator(uid);
     if (!c) return { ok: true };
-    if (c.handle && (await cmd("GET", "handle:" + c.handle)) === uid) await cmd("DEL", "handle:" + c.handle);
+    await releaseHandle(c.handle, uid);
     await Promise.all([c.avatar, ...(c.games || []).map(g => g.thumb)].filter(Boolean).map(id => deleteImage(id, uid, true)));
-    await cmd("SREM", "creators", uid);
-    await cmd("DEL", "creator:" + uid);
+    await deleteCreatorDoc(uid);
     await unfeature(k => k.startsWith(uid + "~"));
-    await Promise.all((c.games || []).map(g => clearRatings(uid + "~" + g.id)));
+    await clearRatings((c.games || []).map(g => uid + "~" + g.id));
     return { ok: true };
   },
 });

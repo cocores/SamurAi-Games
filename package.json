@@ -7,10 +7,12 @@
   },
   "scripts": {
     "build": "esbuild src/firebase.js --bundle --format=esm --minify --target=es2020 --outfile=public/firebase.js",
-    "dev": "npm run build && node scripts/dev.mjs"
+    "dev": "npm run build && node scripts/dev.mjs",
+    "dev:emulators": "npm run build && npx --yes firebase-tools@15.34.0 emulators:exec --project samurai-10ad7 --only auth,firestore \"node scripts/dev.mjs\""
   },
   "dependencies": {
-    "firebase": "^13.2.0"
+    "firebase": "^13.2.0",
+    "firebase-admin": "14.5.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

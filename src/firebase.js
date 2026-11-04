@@ -5,7 +5,7 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported, logEvent } from "firebase/analytics";
 import {
   getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup,
-  GoogleAuthProvider, sendEmailVerification, sendPasswordResetEmail, getAdditionalUserInfo, signOut,
+  GoogleAuthProvider, sendEmailVerification, sendPasswordResetEmail, getAdditionalUserInfo, signOut, connectAuthEmulator,
 } from "firebase/auth";
 
 const firebaseConfig = {
@@ -41,6 +41,8 @@ isSupported()
 // Sign-in. app.js calls these, then sends the returned ID token to /api/session,
 // which verifies it and starts the site session.
 const auth = getAuth(app);
+// Set only by scripts/dev.mjs under `npm run dev:emulators`; never on the deployed site.
+if (window.SAMURAI_EMULATORS && window.SAMURAI_EMULATORS.auth) connectAuthEmulator(auth, window.SAMURAI_EMULATORS.auth, { disableWarnings: true });
 const result = async cred => ({
   token: await cred.user.getIdToken(),
   isNew: !!(getAdditionalUserInfo(cred) || {}).isNewUser,

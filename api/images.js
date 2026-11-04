@@ -1,13 +1,13 @@
 // GET ?id=…: serve an uploaded image (also reachable as /img/<id>).
 // POST {data: "data:image/webp;base64,…"}: upload an image, returns {id, url}.
 // DELETE {id}: remove an image you uploaded (e.g. after cancelling a form).
-import { cmd, getJson, setJson } from "../lib/redis.js";
+// Images live in Firestore (one document each, so no Firebase Storage / Blaze plan is needed).
 import { route, readJson, query, fail } from "../lib/http.js";
 import { requireUser, newId, limit } from "../lib/auth.js";
 import { isImageId } from "../lib/validate.js";
-import { deleteImage } from "../lib/store.js";
+import { getImage, saveImage, deleteImage } from "../lib/store.js";
 
-const MAX_BYTES = 900 * 1024;
+const MAX_BYTES = 750 * 1024; // Firestore documents max out at 1 MiB
 const TYPES = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
 
 function sniff(buf) {
@@ -22,14 +22,14 @@ export default route({
   async GET(req, res) {
     const id = query(req).id;
     if (!isImageId(id)) fail(404, "Not found.");
-    const img = await getJson("img:" + id);
+    const img = await getImage(id);
     if (!img) fail(404, "Not found.");
     res.statusCode = 200;
     res.setHeader("Content-Type", img.type);
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
-    res.end(Buffer.from(img.b64, "base64"));
+    res.end(Buffer.from(img.data));
   },
 
   async POST(req) {
@@ -43,7 +43,7 @@ export default route({
     const type = sniff(buf);
     if (!type || type !== TYPES[m[1]]) fail(400, "That file isn't a valid image.");
     const id = newId("i", 12);
-    await setJson("img:" + id, { owner: user.uid, type, b64: buf.toString("base64"), createdAt: Date.now() });
+    await saveImage(id, { owner: user.uid, type, data: buf, createdAt: Date.now() });
     return { id, url: "/img/" + id };
   },
 

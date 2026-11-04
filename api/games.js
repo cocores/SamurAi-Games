@@ -45,7 +45,7 @@ export default route({
     await saveCreator(c);
     await deleteImage(game.thumb, uid, true);
     await unfeature(k => k === uid + "~" + game.id);
-    await clearRatings(uid + "~" + game.id);
+    await clearRatings([uid + "~" + game.id]);
     return { ok: true };
   },
 });

@@ -49,6 +49,7 @@ function toast(msg, bad){ const t = $("#toast"); t.textContent = msg; t.classNam
 async function api(path, method="GET", body){
   const opts = {method, credentials:"same-origin", headers:{}};
   if (body !== undefined) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  if (method !== "GET") S.freshUntil = Date.now() + 60000;
   let r;
   try { r = await fetch(path, opts); } catch { throw new Error("Can't reach the server. Check your connection and try again."); }
   let j = {};
@@ -97,7 +98,7 @@ function byHandle(hd){ for (const c of S.creators.values()) if (c.handle === hd)
 
 async function load(){
   try {
-    const j = await api("/api/creators");
+    const j = await api("/api/creators" + (Date.now() < (S.freshUntil || 0) ? "?fresh=" + Date.now() : ""));
     S.creators = new Map(j.creators.map(c => [c.uid, c]));
     S.featured = j.featured || [];
     S.ratings = j.ratings || {};
@@ -575,7 +576,7 @@ async function shrink(file, maxW, maxH){
     for (const q of [0.85, 0.7, 0.55]) {
       const d = cv.toDataURL("image/webp", q);
       const out = d.startsWith("data:image/webp") ? d : cv.toDataURL("image/jpeg", q);
-      if (out.length < 1_150_000) return out;
+      if (out.length < 990_000) return out; // stays under the server's 750 KB limit
     }
     return cv.toDataURL("image/jpeg", 0.45);
   } finally { URL.revokeObjectURL(url); }
