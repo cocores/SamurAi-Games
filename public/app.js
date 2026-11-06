@@ -70,13 +70,47 @@ function apiError(e){
   toast(e.message, true);
 }
 
+/* each genre gets its own hue, used by chips and tags */
+const GENRE_HUE = {"All":225,"Action":2,"Arcade":330,"Puzzle":268,"Strategy":212,"RPG":288,"Platformer":140,"Racing":22,"Rhythm":305,"Word":44,"Card & board":172,"Simulation":192,"Idle":95,"Narrative":238,"Other":220};
+const genreHue = g => GENRE_HUE[g] ?? 220;
+
+/* a short burst of confetti for wins (posting, creating a profile, 5-star ratings) */
+function confetti(){
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cv = document.createElement("canvas"); cv.className = "confetti"; cv.setAttribute("aria-hidden","true");
+  document.body.append(cv);
+  const dpr = Math.min(2, window.devicePixelRatio || 1), W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr;
+  const ctx = cv.getContext("2d"), colors = ["#ffb627","#ff5a5f","#2f5bea","#14b892","#ff6fb5","#7fe3c8"];
+  const bits = Array.from({length:140}, () => ({x:W/2 + (Math.random()-.5)*W*.2, y:H*.62, vx:(Math.random()-.5)*18*dpr, vy:(-10-Math.random()*16)*dpr,
+    r:(4+Math.random()*5)*dpr, a:Math.random()*6, va:(Math.random()-.5)*.4, c:colors[(Math.random()*colors.length)|0], sq:Math.random()<.5}));
+  const t0 = performance.now();
+  (function frame(t){
+    const life = (t - t0) / 1800; ctx.clearRect(0,0,W,H);
+    for (const b of bits) {
+      b.vy += .45*dpr; b.vx *= .985; b.x += b.vx; b.y += b.vy; b.a += b.va;
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - life); ctx.translate(b.x,b.y); ctx.rotate(b.a); ctx.fillStyle = b.c;
+      if (b.sq) ctx.fillRect(-b.r, -b.r/2, b.r*2, b.r); else { ctx.beginPath(); ctx.arc(0,0,b.r*.7,0,7); ctx.fill(); }
+      ctx.restore();
+    }
+    if (life < 1) requestAnimationFrame(frame); else cv.remove();
+  })(t0);
+}
+
+function searchIcon(){
+  const el = h("span",{class:"icon","aria-hidden":"true"});
+  el.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg>';
+  return el;
+}
+const blobs = () => h("div",{class:"blobs","aria-hidden":"true"}, h("i"), h("i"), h("i"));
+
 /* generated covers: seigaiha waves on a hue taken from the title */
 function artStyle(seed){
   const hue = hash(seed) % 360;
-  const a = `hsl(${hue} 48% 30%)`, b = `hsl(${(hue+38)%360} 52% 18%)`;
-  const ring = "rgba(255,255,255,.13)";
+  const a = `hsl(${hue} 82% 58%)`, b = `hsl(${(hue+42)%360} 78% 40%)`;
+  const ring = "rgba(255,255,255,.16)";
   const w = `radial-gradient(circle at 50% 100%, transparent 0 18%, ${ring} 18% 24%, transparent 24% 38%, ${ring} 38% 44%, transparent 44% 58%, ${ring} 58% 64%, transparent 64%)`;
-  return `background-image:${w},${w},linear-gradient(135deg, ${a}, ${b})`;
+  const sheen = "radial-gradient(120% 90% at 15% 0%, rgba(255,255,255,.35), transparent 55%)";
+  return `background-image:${sheen},${w},${w},linear-gradient(135deg, ${a}, ${b})`;
 }
 function cover(game, ownerUid, opts={}){
   const el = h(opts.tag || "div", Object.assign({class:"cover"}, opts.attrs || {}));
@@ -87,6 +121,7 @@ function cover(game, ownerUid, opts={}){
     el.append(img);
   }
   if (opts.seal) el.append(h("span",{class:"seal", text:"選 Featured"}));
+  if (opts.play) el.append(h("span",{class:"playfab","aria-hidden":"true", text:"▶"}));
   return el;
 }
 function avatar(c, size){
@@ -188,15 +223,24 @@ function viewGames(){
   const games = allGames();
   const studios = [...S.creators.values()].filter(c => c.kind === "studio").length;
   const players = S.creators.size - studios;
-  const mast = h("section",{class:"mast wave"}, h("div",{class:"wrap"},
+  // decorative: the three newest covers, fanned out; abstract tiles until there are games
+  const newest = games.slice().sort((a,b) => (b.g.createdAt||0) - (a.g.createdAt||0)).slice(0,3);
+  const art = h("div",{class:"hero-art","aria-hidden":"true"},
+    newest.length ? newest.map(x => h("div",{class:"fan"}, cover(x.g, x.c.uid))) :
+      ["★","▶","◆"].map(t => h("div",{class:"fan shape", text:t})));
+  const mast = h("section",{class:"mast wave"}, blobs(), h("div",{class:"wrap"},
     h("div",null,
-      h("h1",null,"Games made with ", h("em",{text:"Claude"}), "."),
-      h("p",{text:"An open arcade for browser games built with Claude. Play what studios and solo makers have shipped, or set up a profile and post your own."}),
+      h("span",{class:"eyebrow", text:"The arcade for games built with Claude"}),
+      h("h1",null,"Play what people ", h("em",{text:"make with Claude"}), "."),
+      h("p",{text:"Browser games from studios and solo makers, all in one place. Find something to play in seconds, or set up a profile and post your own."}),
+      h("div",{class:"hero-ctas"},
+        h("button",{class:"btn sun big", type:"button", onclick:() => { const t = $("#all-games"); if (t) t.scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}); }}, "▶ Start playing"),
+        h("a",{class:"btn glass big", href:"#you"}, me() ? "Post a game" : "Create your profile")),
       h("div",{class:"stats"},
         h("div",null,h("strong",{text:String(games.length)}),h("span",{text:games.length === 1 ? "game" : "games"})),
         h("div",null,h("strong",{text:String(studios)}),h("span",{text:studios === 1 ? "studio" : "studios"})),
         h("div",null,h("strong",{text:String(players)}),h("span",{text:players === 1 ? "solo maker" : "solo makers"})))),
-    h("a",{class:"btn onink", href:"#you"}, me() ? "Post a game" : "Create your profile")));
+    art));
 
   const q = S.q.trim().toLowerCase();
   let list = games.filter(({g,c}) =>
@@ -218,12 +262,12 @@ function viewGames(){
   const main = h("main",{class:"wrap"},
     statusNotice(),
     feat.length && !q && S.genre === "All" ? h("section",{class:"featured"},
-      h("div",{class:"sec"}, h("h2",{text:"Featured"}), h("span",{class:"label", text:"Picked by the moderators"})),
-      h("div",{class:"grid"}, feat.slice(0,3).map(x => gameCard(x, true))), h("div",{style:"height:32px"})) : null,
-    h("div",{class:"sec"}, h("h2",{text:"All games"}), h("span",{class:"label mono", text: list.length + (list.length === 1 ? " game" : " games")})),
-    h("div",{class:"toolbar"}, h("label",{class:"search"}, h("span",{"aria-hidden":"true", class:"label", text:"⌕"}), searchIn), sortSel),
+      h("div",{class:"sec"}, h("h2",{text:"Featured"}), h("span",{class:"count", text:"Picked by the moderators"})),
+      h("div",{class:"grid"}, feat.slice(0,3).map(x => gameCard(x, true)))) : null,
+    h("div",{class:"sec", id:"all-games"}, h("h2",{text:"All games"}), h("span",{class:"count", text: list.length + (list.length === 1 ? " game" : " games")})),
+    h("div",{class:"toolbar"}, h("label",{class:"search"}, searchIcon(), searchIn), sortSel),
     h("div",{class:"chips", role:"group", "aria-label":"Filter by genre"},
-      ["All", ...GENRES.filter(g => usedGenres.has(g))].map(g => h("button",{class:"chip", type:"button", "aria-pressed":String(S.genre===g), onclick:() => { S.genre = g; render(); }, text:g}))),
+      ["All", ...GENRES.filter(g => usedGenres.has(g))].map(g => h("button",{class:"chip", type:"button", style:`--g:${genreHue(g)}`, "aria-pressed":String(S.genre===g), onclick:() => { S.genre = g; render(); }, text:g}))),
     list.length ? h("div",{class:"grid"}, list.map(x => gameCard(x))) :
       S.ready && !S.loadError ? h("div",{class:"empty"},
         h("h3",{text: games.length ? "No games match that" : "The arcade is empty so far"}),
@@ -235,16 +279,16 @@ function viewGames(){
 
 function gameCard({g,c,key}, featured){
   const url = safeUrl(g.url);
-  return h("article",{class:"card"},
-    cover(g, c.uid, {tag:"button", attrs:{type:"button","aria-label":"Details for " + g.title, onclick:() => openModal(key)}, seal:featured}),
+  return h("article",{class:"card", style:`--h:${hash(c.uid + g.title) % 360}`},
+    cover(g, c.uid, {tag:"button", attrs:{type:"button","aria-label":"Details for " + g.title, onclick:() => openModal(key)}, seal:featured, play:true}),
     h("div",{class:"body"},
       h("h3",null, h("button",{class:"linkbtn", type:"button", onclick:() => openModal(key), text:g.title})),
       g.tagline ? h("p",{class:"tagline", text:g.tagline}) : null,
       ratingLine(key),
-      h("div",{class:"meta"}, g.genre ? h("span",{class:"tag", text:g.genre}) : null, (g.controls||[]).slice(0,3).map(x => h("span",{class:"tag", text:x}))),
+      h("div",{class:"meta"}, g.genre ? h("span",{class:"tag", style:`--g:${genreHue(g.genre)}`, text:g.genre}) : null, (g.controls||[]).slice(0,3).map(x => h("span",{class:"tag plain", text:x}))),
       h("div",{class:"foot"},
         h("a",{class:"by", href:"#by-" + c.handle, title:c.name}, avatar(c), h("span",{text:c.name})),
-        url ? h("a",{class:"btn primary sm", href:url, target:"_blank", rel:"noopener noreferrer", onclick:() => track("play_game", {game_id:key, game_title:g.title})}, "Play ↗") : null)));
+        url ? h("a",{class:"btn primary sm", href:url, target:"_blank", rel:"noopener noreferrer", onclick:() => track("play_game", {game_id:key, game_title:g.title})}, "▶ Play") : null)));
 }
 
 function viewCreators(){
@@ -253,17 +297,17 @@ function viewCreators(){
     .sort((a,b) => (b.games||[]).length - (a.games||[]).length || a.name.localeCompare(b.name));
   return h("main",{class:"wrap"},
     statusNotice(),
-    h("div",{class:"sec"}, h("h2",{text:"Creators"}), h("span",{class:"label mono", text:list.length + (list.length === 1 ? " profile" : " profiles")})),
+    h("div",{class:"sec"}, h("h2",{text:"Creators"}), h("span",{class:"count", text:list.length + (list.length === 1 ? " profile" : " profiles")})),
     h("div",{class:"chips", role:"group", "aria-label":"Filter creators"},
       [["all","Everyone"],["studio","Studios & companies"],["solo","Solo makers"]].map(([v,t]) =>
-        h("button",{class:"chip", type:"button", "aria-pressed":String(S.ckind===v), onclick:() => { S.ckind = v; render(); }, text:t}))),
+        h("button",{class:"chip", type:"button", style:`--g:${{all:225, studio:330, solo:160}[v]}`, "aria-pressed":String(S.ckind===v), onclick:() => { S.ckind = v; render(); }, text:t}))),
     list.length ? h("div",{class:"grid"}, list.map(c => h("a",{class:"ccard", href:"#by-" + c.handle},
       avatar(c, "md"),
       h("div",{class:"txt"},
         h("span",{class:"kind", text:c.kind === "studio" ? "Studio" : "Solo maker"}),
         h("h3",{text:c.name}),
         c.bio ? h("p",{text:c.bio}) : null,
-        h("span",{class:"label mono", text:(c.games||[]).length + ((c.games||[]).length === 1 ? " game" : " games")}))))) :
+        h("span",{class:"label", text:(c.games||[]).length + ((c.games||[]).length === 1 ? " game" : " games")}))))) :
       S.ready && !S.loadError ? h("div",{class:"empty"}, h("h3",{text:"No profiles yet"}), h("p",{text:"Studios, companies and solo makers each get a page that lists their games."}), h("a",{class:"btn primary", href:"#you"}, "Create yours")) : null
   );
 }
@@ -273,7 +317,7 @@ function viewProfile(){
   if (!c) return h("main",{class:"wrap"}, statusNotice(), S.ready && !S.loadError ? h("div",{class:"empty"}, h("h3",{text:"No profile at this address"}), h("p",{text:"It may have been renamed or removed."}), h("a",{class:"btn", href:"#creators"}, "See all creators")) : null);
   const site = safeUrl(c.website);
   const games = (c.games||[]).filter(g => g && g.title && safeUrl(g.url)).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
-  const head = h("section",{class:"phead wave"}, h("div",{class:"wrap"},
+  const head = h("section",{class:"phead wave"}, blobs(), h("div",{class:"wrap"},
     avatar(c, "lg"),
     h("div",{class:"txt"},
       h("span",{class:"kind", text:c.kind === "studio" ? "Studio · company" : "Solo maker"}),
@@ -285,14 +329,14 @@ function viewProfile(){
       try { await api("/api/creators","DELETE",{uid:c.uid}); toast("Profile removed"); await load(); location.hash = "#creators"; } catch(e){ apiError(e); }
     }, true) : null));
   return h("div",null, head, h("main",{class:"wrap"},
-    h("div",{class:"sec"}, h("h2",{text:"Games"}), h("span",{class:"label mono", text:games.length + (games.length === 1 ? " game" : " games")})),
+    h("div",{class:"sec"}, h("h2",{text:"Games"}), h("span",{class:"count", text:games.length + (games.length === 1 ? " game" : " games")})),
     games.length ? h("div",{class:"grid"}, games.map(g => gameCard({g, c, key:c.uid + "~" + g.id}, S.featured.includes(c.uid + "~" + g.id)))) :
       h("div",{class:"empty"}, h("h3",{text:"Nothing posted yet"}), h("p",{text: c.uid === S.uid ? "Your games will appear here once you post them." : "Check back soon."}))));
 }
 
 function viewAbout(){
   const games = allGames().length, makers = S.creators.size;
-  const head = h("section",{class:"about-head wave"}, h("div",{class:"wrap"},
+  const head = h("section",{class:"about-head wave"}, blobs(), h("div",{class:"wrap"},
     h("img",{src:"/brand/samurai-mark-light.png", alt:"", width:"120", height:"146"}),
     h("div",{class:"txt"},
       h("span",{class:"kind", style:"color:#f2d68c", text:"About"}),
@@ -365,6 +409,7 @@ async function rate(key, score){
     const j = await api("/api/ratings","POST",{key, score});
     if (j.rating) S.ratings[key] = j.rating; else delete S.ratings[key];
     toast(score ? `Rated ${score} ${score === 1 ? "star" : "stars"}` : "Rating cleared");
+    if (score === 5) confetti();
     if (score) track("rate_game", {game_id:key, score});
   } catch(e){
     if (prev) S.mine[key] = prev; else delete S.mine[key];
@@ -402,7 +447,7 @@ function openModal(key, quiet){
       rateBox(key, c),
       facts.length ? h("div",{class:"facts"}, facts.map(([k,v]) => h("div",null, h("span",{class:"label", text:k}), h("b",{text:v})))) : null,
       h("div",{class:"actions"},
-        url ? h("a",{class:"btn primary", href:url, target:"_blank", rel:"noopener noreferrer", onclick:() => track("play_game", {game_id:key, game_title:g.title})}, "Play now ↗") : null,
+        url ? h("a",{class:"btn sun big", href:url, target:"_blank", rel:"noopener noreferrer", onclick:() => track("play_game", {game_id:key, game_title:g.title})}, "▶ Play now") : null,
         url ? h("button",{class:"btn", type:"button", onclick:() => copy(url)}, "Copy game link") : null,
         S.canMod ? h("button",{class:"btn ghost", type:"button", onclick:() => toggleFeature(key), text: isFeat ? "Unfeature" : "Feature"}) : null,
         S.canMod || c.uid === S.uid ? modControl("g:" + key, "Remove game", async () => {
@@ -637,7 +682,7 @@ function profileForm(mine){
     try {
       const j = await api("/api/creators","PUT",{profile:{kind:d.kind, name:nm, handle:hd, bio:d.bio || "", website:ws, avatar:d.avatar || null}});
       S.creators.set(S.uid, j.creator);
-      S.profDraft = null; S.dirty = false; toast(mine ? "Profile saved" : "Profile created"); render(true);
+      S.profDraft = null; S.dirty = false; toast(mine ? "Profile saved" : "Profile created"); render(true); if (!mine) confetti();
     } catch(e2){ err.textContent = e2.message; save.disabled = false; save.textContent = mine ? "Save profile" : "Create profile"; }
   }},
     h("div",{class:"field full"}, h("span",{text:"Profile type"}), kind),
@@ -676,7 +721,7 @@ function gameForm(d){
     err.textContent = ""; save.disabled = true; save.textContent = "Saving…";
     try {
       await api("/api/games","POST",{game:{id:d.id || undefined, title:d.title, tagline:d.tagline, url:d.url, description:d.description, genre:d.genre, controls:d.controls, length:d.length, builtWith:d.builtWith, thumb:d.thumb}});
-      toast(d.id ? "Game updated" : "Game posted"); if (!d.id) track("post_game", {genre:d.genre}); S.edit = null; S.dirty = false; await load();
+      toast(d.id ? "Game updated" : "Game posted"); if (!d.id) { track("post_game", {genre:d.genre}); confetti(); } S.edit = null; S.dirty = false; await load();
     } catch(e2){ err.textContent = e2.message; save.disabled = false; save.textContent = d.id ? "Save changes" : "Post game"; }
   }},
     field("Title", title),
